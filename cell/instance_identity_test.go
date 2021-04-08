@@ -33,6 +33,7 @@ import (
 	"code.cloudfoundry.org/lager/lagertest"
 	"code.cloudfoundry.org/localip"
 	"code.cloudfoundry.org/rep/cmd/rep/config"
+	"golang.org/x/net/http2"
 
 	"crypto/tls"
 	"crypto/x509"
@@ -50,7 +51,7 @@ import (
 
 const GraceBusyboxImageURL = "docker:///cfdiegodocker/grace"
 
-var _ = Describe("InstanceIdentity", func() {
+var _ = FDescribe("InstanceIdentity", func() {
 	var (
 		validityPeriod                              time.Duration
 		cellProcess                                 ifrit.Process
@@ -97,7 +98,7 @@ var _ = Describe("InstanceIdentity", func() {
 		}
 
 		client = http.Client{}
-		client.Transport = &http.Transport{
+		client.Transport = &http2.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: false,
 				RootCAs:            rootCAs,
@@ -333,7 +334,7 @@ var _ = Describe("InstanceIdentity", func() {
 				if runtime.GOOS == "windows" {
 					Skip("unable to find the equivalant command in windows even after using curl.exe (see https://github.com/curl/curl/issues/2262)")
 				}
-				output = runTaskAndGetCommandOutput(fmt.Sprintf("curl --silent -k --cert /etc/cf-instance-credentials/instance.crt --key /etc/cf-instance-credentials/instance.key https://%s", url), []string{})
+				output = runTaskAndGetCommandOutput(fmt.Sprintf("curl --http2 --silent -k --cert /etc/cf-instance-credentials/instance.crt --key /etc/cf-instance-credentials/instance.key https://%s", url), []string{})
 			})
 
 			It("successfully connects", func() {
@@ -438,7 +439,7 @@ var _ = Describe("InstanceIdentity", func() {
 
 			Context("when an invalid cipher is used", func() {
 				BeforeEach(func() {
-					client.Transport = &http.Transport{
+					client.Transport = &http2.Transport{
 						TLSClientConfig: &tls.Config{
 							InsecureSkipVerify: false,
 							RootCAs:            rootCAs,
@@ -453,8 +454,23 @@ var _ = Describe("InstanceIdentity", func() {
 				})
 			})
 
-			It("should have a container with envoy enabled on it", func() {
+			FIt("should have a container with envoy enabled on it", func() {
 				Eventually(connect, 10*time.Second).Should(Succeed())
+			})
+
+			FContext("If I'm HTTP/1.1", func() {
+				BeforeEach(func() {
+					client.Transport = &http.Transport{
+						TLSClientConfig: &tls.Config{
+							InsecureSkipVerify: false,
+							RootCAs:            rootCAs,
+						},
+					}
+				})
+
+				FIt("should have a container with envoy enabled on it", func() {
+					Eventually(connect, 10*time.Second).Should(Succeed())
+				})
 			})
 
 			Context("when rep is configured for mutual tls", func() {
@@ -476,7 +492,7 @@ var _ = Describe("InstanceIdentity", func() {
 					tlsCert, err := tls.LoadX509KeyPair(string(serverCert), string(serverKey))
 					Expect(err).NotTo(HaveOccurred())
 
-					client.Transport = &http.Transport{
+					client.Transport = &http2.Transport{
 						TLSClientConfig: &tls.Config{
 							InsecureSkipVerify: false,
 							RootCAs:            rootCAs,
@@ -570,7 +586,7 @@ var _ = Describe("InstanceIdentity", func() {
 						wrongTlsCert, err := tls.LoadX509KeyPair(string(wrongServerCert), string(wrongServerKey))
 						Expect(err).NotTo(HaveOccurred())
 
-						client.Transport = &http.Transport{
+						client.Transport = &http2.Transport{
 							TLSClientConfig: &tls.Config{
 								InsecureSkipVerify: false,
 								RootCAs:            rootCAs,
